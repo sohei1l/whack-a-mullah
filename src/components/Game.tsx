@@ -11,6 +11,16 @@ const FRAME_TIME = 1000 / TARGET_FPS;
 class SoundEngine {
   private ctx: AudioContext | null = null;
 
+  // Must be called directly inside a user gesture (click/touchstart) to unlock audio on mobile
+  unlock() {
+    if (!this.ctx) {
+      this.ctx = new AudioContext();
+    }
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
   private getCtx(): AudioContext {
     if (!this.ctx) {
       this.ctx = new AudioContext();
@@ -1087,7 +1097,7 @@ export default function Game() {
     ctx.font = 'bold 26px Arial';
     const pulse = Math.sin(frameCount * 0.05) * 0.3 + 0.7;
     ctx.globalAlpha = pulse;
-    ctx.fillText('Click or Press SPACE to Start', width / 2, height / 2 + 145);
+    ctx.fillText('Click or Tap to Start', width / 2, height / 2 + 145);
     ctx.globalAlpha = 1;
 
     ctx.textAlign = 'left';
@@ -1138,7 +1148,7 @@ export default function Game() {
     ctx.font = 'bold 22px Arial';
     const pulse = Math.sin(frameCount * 0.05) * 0.3 + 0.7;
     ctx.globalAlpha = pulse;
-    ctx.fillText('Click or Press SPACE to Play Again', width / 2, height / 2 + 140);
+    ctx.fillText('Click or Tap to Play Again', width / 2, height / 2 + 140);
     ctx.globalAlpha = 1;
 
     ctx.textAlign = 'left';
@@ -1192,20 +1202,27 @@ export default function Game() {
     lastFrameTimeRef.current = performance.now();
 
     let gameOverSoundPlayed = false;
+    let accumulator = 0;
 
     const gameLoop = (currentTime: number) => {
       const engine = engineRef.current;
       if (!engine) return;
 
       const deltaTime = currentTime - lastFrameTimeRef.current;
+      lastFrameTimeRef.current = currentTime;
 
-      if (deltaTime >= FRAME_TIME * 0.9) {
-        lastFrameTimeRef.current = currentTime;
+      // Clamp delta to avoid spiral of death (e.g. tab was backgrounded)
+      accumulator += Math.min(deltaTime, FRAME_TIME * 5);
+
+      let updated = false;
+      while (accumulator >= FRAME_TIME) {
+        accumulator -= FRAME_TIME;
         frameCountRef.current++;
 
         const prevState = engine.getData().state;
         engine.update();
         const data = engine.getData();
+        updated = true;
 
         if (soundRef.current) {
           checkSoundTriggers(data, soundRef.current);
@@ -1218,7 +1235,9 @@ export default function Game() {
             gameOverSoundPlayed = false;
           }
         }
+      }
 
+      if (updated) {
         draw(ctx, engine, frameCountRef.current);
       }
 
@@ -1236,38 +1255,6 @@ export default function Game() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        e.preventDefault();
-        const engine = engineRef.current;
-        if (!engine) return;
-        const data = engine.getData();
-
-        if (data.state === GameState.START || data.state === GameState.GAMEOVER) {
-          engine.handleWhack(0, 0);
-        } else if (data.state === GameState.PLAYING) {
-          // Space targets the best mullah (most visible threatening one)
-          let bestMullah: MullahInHole | null = null;
-          let bestProgress = 0;
-          for (const m of data.mullahs) {
-            if ((m.state === MullahState.THREATENING || m.state === MullahState.RISING) && m.popProgress > bestProgress) {
-              bestMullah = m;
-              bestProgress = m.popProgress;
-            }
-          }
-          if (bestMullah && bestProgress > 0.3) {
-            const hole = HOLE_LAYOUT[bestMullah.holeIndex];
-            const hitIndex = engine.handleWhack(hole.x + hole.width / 2, hole.y - 35);
-            if (hitIndex >= 0) {
-              spawnHitParticle(hole.x + hole.width / 2, hole.y - 45, data.combo);
-            } else {
-              soundRef.current?.playMiss();
-            }
-          }
-        }
-      }
-    };
-
     const getCanvasCoords = (clientX: number, clientY: number) => {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
@@ -1281,6 +1268,9 @@ export default function Game() {
     const handleClick = (e: MouseEvent) => {
       const engine = engineRef.current;
       if (!engine) return;
+
+      // Unlock audio on user gesture (required for mobile)
+      soundRef.current?.unlock();
 
       const { x, y } = getCanvasCoords(e.clientX, e.clientY);
       const data = engine.getData();
@@ -1300,6 +1290,9 @@ export default function Game() {
       const engine = engineRef.current;
       if (!engine) return;
 
+      // Unlock audio on user gesture (required for mobile)
+      soundRef.current?.unlock();
+
       const touch = e.touches[0];
       const { x, y } = getCanvasCoords(touch.clientX, touch.clientY);
       const data = engine.getData();
@@ -1314,12 +1307,10 @@ export default function Game() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
     canvas.addEventListener('click', handleClick);
     canvas.addEventListener('touchstart', handleTouch, { passive: false });
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
       canvas.removeEventListener('click', handleClick);
       canvas.removeEventListener('touchstart', handleTouch);
     };
@@ -1352,7 +1343,7 @@ export default function Game() {
         style={{ imageRendering: 'auto' }}
       />
       <p className="text-gray-400 mt-4 text-sm">
-        Click or tap the mullah when he pops up! Press SPACE as shortcut.
+        Click or tap the mullah when he pops up!
       </p>
       <a
         href="https://github.com/sohei1l"
