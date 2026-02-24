@@ -16,20 +16,24 @@ class SoundEngine {
   unlock() {
     try {
       if (!this.ctx) {
-        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const W = window as unknown as Record<string, unknown>;
+        const AudioCtx = (W.AudioContext || W.webkitAudioContext) as typeof AudioContext;
         if (!AudioCtx) return;
         this.ctx = new AudioCtx();
       }
+      // Always resume on every gesture - iOS can re-suspend
       if (this.ctx.state === 'suspended') {
-        this.ctx.resume();
+        this.ctx.resume().catch(() => {});
       }
-      // Play silent buffer to fully unlock audio on iOS
-      if (!this.unlocked && this.ctx) {
-        const buffer = this.ctx.createBuffer(1, 1, 22050);
-        const source = this.ctx.createBufferSource();
-        source.buffer = buffer;
-        source.connect(this.ctx.destination);
-        source.start(0);
+      // Play a real oscillator (nearly silent) to fully unlock on iOS
+      if (!this.unlocked && this.ctx.state !== 'closed') {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0.001;
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(0);
+        osc.stop(this.ctx.currentTime + 0.001);
         this.unlocked = true;
       }
     } catch {}
@@ -37,11 +41,13 @@ class SoundEngine {
 
   private getCtx(): AudioContext {
     if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const W = window as unknown as Record<string, unknown>;
+      const AudioCtx = (W.AudioContext || W.webkitAudioContext) as typeof AudioContext;
       this.ctx = new AudioCtx();
     }
+    // Always try to resume in case it got suspended
     if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
     return this.ctx;
   }
@@ -2245,15 +2251,8 @@ export default function Game() {
         if (mullah.state === MullahState.RISING && prevState === MullahState.HIDDEN) {
           sound.playPopUp();
         }
-        if (mullah.state === MullahState.WHACKED) {
-          sound.playWhack();
-          if (mullah.isRat) {
-            setTimeout(() => sound.playSqueak(), 80);
-          }
-          if (data.combo > 1) {
-            setTimeout(() => sound.playCombo(), 100);
-          }
-        }
+        // Whack/squeak/combo sounds are played directly in the gesture handler
+        // for mobile compatibility - don't duplicate them here
         if (mullah.state === MullahState.RETREATING) {
           sound.playRetreat();
         }
@@ -2391,6 +2390,14 @@ export default function Game() {
         const mullah = data.mullahs[hitIndex];
         const hole = config.holes[mullah.holeIndex];
         spawnHitParticle(hole.x + hole.width / 2, hole.y - 45, data.combo, mullah.isRat);
+        // Play sounds directly in the gesture handler for mobile compatibility
+        soundRef.current?.playWhack();
+        if (mullah.isRat) {
+          setTimeout(() => soundRef.current?.playSqueak(), 80);
+        }
+        if (data.combo > 1) {
+          setTimeout(() => soundRef.current?.playCombo(), 100);
+        }
       } else if (data.state === GameState.PLAYING) {
         soundRef.current?.playMiss();
       }
