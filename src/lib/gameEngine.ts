@@ -27,6 +27,7 @@ export class GameEngine {
       highScore,
       combo: 0,
       maxCombo: 0,
+      whacks: 0,
       timeRemaining: this.config.gameDuration,
       difficulty: 0,
       mullahs: [this.createHiddenMullah([])],
@@ -39,6 +40,10 @@ export class GameEngine {
     };
   }
 
+  private hasActiveRat(): boolean {
+    return this.data?.mullahs?.some(m => m.isRat && m.state !== MullahState.HIDDEN) ?? false;
+  }
+
   private createHiddenMullah(occupiedHoles: number[]): MullahInHole {
     let holeIndex: number;
     const available = [];
@@ -49,6 +54,10 @@ export class GameEngine {
       ? available[Math.floor(Math.random() * available.length)]
       : Math.floor(Math.random() * this.config.holes.length);
 
+    // Rat spawns: ~40% chance starting from difficulty 1, but only one rat at a time
+    const isRat = !this.hasActiveRat() && (this.data?.difficulty ?? 0) >= 1 && Math.random() < 0.40;
+    const speed = this.getRandomSpeed();
+
     return {
       holeIndex,
       state: MullahState.HIDDEN,
@@ -57,27 +66,28 @@ export class GameEngine {
       walkFrame: 0,
       dizzyRotation: 0,
       fingerWagFrame: 0,
-      speed: this.getRandomSpeed(),
+      speed: isRat ? speed * 1.15 : speed,
       stars: 0,
+      isRat,
     };
   }
 
   private getRandomSpeed(): number {
-    const difficultyBonus = this.data ? this.data.difficulty * 0.01 : 0;
-    return this.config.baseRiseSpeed + difficultyBonus + Math.random() * 0.03;
+    const difficultyBonus = this.data ? this.data.difficulty * 0.008 : 0;
+    return this.config.baseRiseSpeed + difficultyBonus + Math.random() * 0.02;
   }
 
   private getRandomThreatenDuration(): number {
     const difficultyReduction = (this.data?.difficulty || 0) * 8;
     const min = this.config.minThreatenDuration;
-    const max = Math.max(min + 10, this.config.maxThreatenDuration - difficultyReduction);
+    const max = Math.max(min + 15, this.config.maxThreatenDuration - difficultyReduction);
     return min + Math.random() * (max - min);
   }
 
   private getRandomHiddenDuration(): number {
     const difficultyReduction = (this.data?.difficulty || 0) * 5;
     const min = this.config.minHiddenDuration;
-    const max = Math.max(min + 10, this.config.maxHiddenDuration - difficultyReduction);
+    const max = Math.max(min + 15, this.config.maxHiddenDuration - difficultyReduction);
     return min + Math.random() * (max - min);
   }
 
@@ -107,8 +117,8 @@ export class GameEngine {
   // How many mullahs should be active based on difficulty
   private getTargetMullahCount(): number {
     const d = this.data.difficulty;
-    if (d >= 5) return 3;
-    if (d >= 2) return 2;
+    if (d >= 6) return 3;
+    if (d >= 3) return 2;
     return 1;
   }
 
@@ -131,9 +141,10 @@ export class GameEngine {
   public handleWhack(clickX: number, clickY: number): number {
     // Returns index of whacked mullah, or -1 for miss
     if (this.data.state !== GameState.PLAYING) {
-      if (this.data.state === GameState.START || this.data.state === GameState.GAMEOVER) {
+      if (this.data.state === GameState.START) {
         this.startGame();
       }
+      // GAMEOVER: handled by UI button in component
       return -1;
     }
 
@@ -192,8 +203,10 @@ export class GameEngine {
     mullah.stars = 0;
 
     this.data.combo++;
+    this.data.whacks++;
     const comboBonus = Math.min(this.data.combo - 1, 5);
-    this.data.score += 1 + comboBonus;
+    const basePoints = mullah.isRat ? 2 : 1;
+    this.data.score += basePoints + comboBonus;
 
     if (this.data.combo > this.data.maxCombo) {
       this.data.maxCombo = this.data.combo;
@@ -209,7 +222,7 @@ export class GameEngine {
     this.data.lastWhackedHole = mullah.holeIndex;
     this.data.hitEffectTimer = 20;
     this.data.shakeTimer = 8;
-    this.data.shakeIntensity = 4;
+    this.data.shakeIntensity = mullah.isRat ? 6 : 4;
   }
 
   public update(): void {
@@ -261,6 +274,7 @@ export class GameEngine {
           mullah.state = MullahState.RISING;
           mullah.holeIndex = this.getRandomHoleIndex(mullah.holeIndex);
           mullah.speed = this.getRandomSpeed();
+          if (mullah.isRat) mullah.speed *= 1.15;
           mullah.popProgress = 0;
         }
         break;
@@ -270,7 +284,9 @@ export class GameEngine {
         if (mullah.popProgress >= 1) {
           mullah.popProgress = 1;
           mullah.state = MullahState.THREATENING;
-          mullah.stateTimer = this.getRandomThreatenDuration();
+          // Rats have shorter threaten window (harder to hit)
+          const duration = this.getRandomThreatenDuration();
+          mullah.stateTimer = mullah.isRat ? duration * 0.7 : duration;
         }
         break;
 
@@ -293,6 +309,8 @@ export class GameEngine {
           mullah.popProgress = 0;
           mullah.state = MullahState.HIDDEN;
           mullah.stateTimer = this.getRandomHiddenDuration();
+          // Re-roll rat status: only one rat at a time
+          mullah.isRat = !this.hasActiveRat() && (this.data.difficulty >= 1) && Math.random() < 0.40;
         }
         break;
 
@@ -302,6 +320,8 @@ export class GameEngine {
           mullah.popProgress = 0;
           mullah.state = MullahState.HIDDEN;
           mullah.stateTimer = this.getRandomHiddenDuration();
+          // Re-roll rat status: only one rat at a time
+          mullah.isRat = !this.hasActiveRat() && (this.data.difficulty >= 1) && Math.random() < 0.40;
         }
         break;
     }
