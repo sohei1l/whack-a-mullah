@@ -19,6 +19,8 @@ export interface Hole {
   height: number;
 }
 
+export type CharacterType = 'mullah' | 'rat' | 'woman' | 'kid';
+
 export interface MullahInHole {
   holeIndex: number;
   state: MullahState;
@@ -30,6 +32,8 @@ export interface MullahInHole {
   speed: number;
   stars: number;
   isRat: boolean;
+  characterType: CharacterType;
+  colorVariant: number;
 }
 
 export interface GameConfig {
@@ -104,7 +108,7 @@ const SHARED_GAME_CONFIG = {
   maxHiddenDuration: 80,
   whackedDuration: 35,
   retreatSpeed: 0.08,
-  gameDuration: 20 * 60,
+  gameDuration: 30 * 60,
   difficultyInterval: 150,
 };
 

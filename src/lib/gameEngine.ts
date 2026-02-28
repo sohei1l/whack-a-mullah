@@ -4,6 +4,7 @@ import {
   GameData,
   GameConfig,
   MullahInHole,
+  CharacterType,
   DEFAULT_CONFIG,
 } from './gameTypes';
 
@@ -54,8 +55,8 @@ export class GameEngine {
       ? available[Math.floor(Math.random() * available.length)]
       : Math.floor(Math.random() * this.config.holes.length);
 
-    // Rat spawns: ~40% chance starting from difficulty 1, but only one rat at a time
-    const isRat = !this.hasActiveRat() && (this.data?.difficulty ?? 0) >= 1 && Math.random() < 0.40;
+    const characterType = this.rollCharacterType();
+    const isRat = characterType === 'rat';
     const speed = this.getRandomSpeed();
 
     return {
@@ -69,26 +70,58 @@ export class GameEngine {
       speed: isRat ? speed * 1.15 : speed,
       stars: 0,
       isRat,
+      characterType,
+      colorVariant: Math.floor(Math.random() * 5),
     };
+  }
+
+  private rollCharacterType(): CharacterType {
+    const difficulty = this.data?.difficulty ?? 0;
+    const isFrantic = this.data != null && this.data.timeRemaining <= 5 * 60;
+
+    // In frantic mode (last 5s), more penalty characters appear as traps
+    const womanChance = isFrantic ? 0.35 : 0.20;
+    const kidChance = isFrantic ? 0.30 : 0.18;
+
+    if (difficulty >= 1 && Math.random() < womanChance) {
+      return 'woman';
+    }
+    if (difficulty >= 2 && Math.random() < kidChance) {
+      return 'kid';
+    }
+    if (!this.hasActiveRat() && difficulty >= 1 && Math.random() < 0.40) {
+      return 'rat';
+    }
+    return 'mullah';
+  }
+
+  private isFranticMode(): boolean {
+    return this.data != null && this.data.timeRemaining > 0 && this.data.timeRemaining <= 5 * 60;
   }
 
   private getRandomSpeed(): number {
     const difficultyBonus = this.data ? this.data.difficulty * 0.008 : 0;
-    return this.config.baseRiseSpeed + difficultyBonus + Math.random() * 0.02;
+    let speed = this.config.baseRiseSpeed + difficultyBonus + Math.random() * 0.02;
+    if (this.isFranticMode()) speed *= 2.0;
+    return speed;
   }
 
   private getRandomThreatenDuration(): number {
     const difficultyReduction = (this.data?.difficulty || 0) * 8;
     const min = this.config.minThreatenDuration;
     const max = Math.max(min + 15, this.config.maxThreatenDuration - difficultyReduction);
-    return min + Math.random() * (max - min);
+    let duration = min + Math.random() * (max - min);
+    if (this.isFranticMode()) duration *= 0.4;
+    return duration;
   }
 
   private getRandomHiddenDuration(): number {
     const difficultyReduction = (this.data?.difficulty || 0) * 5;
     const min = this.config.minHiddenDuration;
     const max = Math.max(min + 15, this.config.maxHiddenDuration - difficultyReduction);
-    return min + Math.random() * (max - min);
+    let duration = min + Math.random() * (max - min);
+    if (this.isFranticMode()) duration *= 0.3;
+    return duration;
   }
 
   private getOccupiedHoles(): number[] {
@@ -116,6 +149,8 @@ export class GameEngine {
 
   // How many mullahs should be active based on difficulty
   private getTargetMullahCount(): number {
+    // Last 5 seconds: frantic mode - lots of characters
+    if (this.isFranticMode()) return 5;
     const d = this.data.difficulty;
     if (d >= 6) return 3;
     if (d >= 3) return 2;
@@ -202,17 +237,25 @@ export class GameEngine {
     mullah.dizzyRotation = 0;
     mullah.stars = 0;
 
-    this.data.combo++;
-    this.data.whacks++;
-    const comboBonus = Math.min(this.data.combo - 1, 5);
-    const basePoints = mullah.isRat ? 2 : 1;
-    this.data.score += basePoints + comboBonus;
+    const isPenalty = mullah.characterType === 'woman' || mullah.characterType === 'kid';
 
-    if (this.data.combo > this.data.maxCombo) {
-      this.data.maxCombo = this.data.combo;
+    if (isPenalty) {
+      const penalty = mullah.characterType === 'woman' ? 3 : 2;
+      this.data.score -= penalty;
+      this.data.combo = 0;
+    } else {
+      this.data.combo++;
+      this.data.whacks++;
+      const comboBonus = Math.min(this.data.combo - 1, 5);
+      const basePoints = mullah.isRat ? 2 : 1;
+      this.data.score += basePoints + comboBonus;
+
+      if (this.data.combo > this.data.maxCombo) {
+        this.data.maxCombo = this.data.combo;
+      }
     }
 
-    if (this.data.score > this.data.highScore) {
+    if (this.data.score > 0 && this.data.score > this.data.highScore) {
       this.data.highScore = this.data.score;
       if (typeof window !== 'undefined') {
         localStorage.setItem('whackAMullahHighScore', this.data.highScore.toString());
@@ -222,7 +265,7 @@ export class GameEngine {
     this.data.lastWhackedHole = mullah.holeIndex;
     this.data.hitEffectTimer = 20;
     this.data.shakeTimer = 8;
-    this.data.shakeIntensity = mullah.isRat ? 6 : 4;
+    this.data.shakeIntensity = isPenalty ? 8 : (mullah.isRat ? 6 : 4);
   }
 
   public update(): void {
@@ -231,7 +274,7 @@ export class GameEngine {
     this.data.timeRemaining--;
     if (this.data.timeRemaining <= 0) {
       this.data.state = GameState.GAMEOVER;
-      if (this.data.score > this.data.highScore) {
+      if (this.data.score > 0 && this.data.score > this.data.highScore) {
         this.data.highScore = this.data.score;
         if (typeof window !== 'undefined') {
           localStorage.setItem('whackAMullahHighScore', this.data.highScore.toString());
@@ -309,8 +352,11 @@ export class GameEngine {
           mullah.popProgress = 0;
           mullah.state = MullahState.HIDDEN;
           mullah.stateTimer = this.getRandomHiddenDuration();
-          // Re-roll rat status: only one rat at a time
-          mullah.isRat = !this.hasActiveRat() && (this.data.difficulty >= 1) && Math.random() < 0.40;
+          // Re-roll character type
+          const newType = this.rollCharacterType();
+          mullah.characterType = newType;
+          mullah.isRat = newType === 'rat';
+          mullah.colorVariant = Math.floor(Math.random() * 5);
         }
         break;
 
@@ -320,8 +366,11 @@ export class GameEngine {
           mullah.popProgress = 0;
           mullah.state = MullahState.HIDDEN;
           mullah.stateTimer = this.getRandomHiddenDuration();
-          // Re-roll rat status: only one rat at a time
-          mullah.isRat = !this.hasActiveRat() && (this.data.difficulty >= 1) && Math.random() < 0.40;
+          // Re-roll character type
+          const newType2 = this.rollCharacterType();
+          mullah.characterType = newType2;
+          mullah.isRat = newType2 === 'rat';
+          mullah.colorVariant = Math.floor(Math.random() * 5);
         }
         break;
     }

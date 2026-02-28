@@ -224,6 +224,62 @@ class SoundEngine {
       osc.stop(now + 0.08);
     } catch {}
   }
+
+  playPenalty() {
+    try {
+      const ctx = this.getCtx();
+      const now = ctx.currentTime;
+      // Descending buzzer sound
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(400, now);
+      osc.frequency.exponentialRampToValueAtTime(100, now + 0.3);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 600;
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.3);
+      // Second dissonant tone
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'square';
+      osc2.frequency.setValueAtTime(200, now);
+      osc2.frequency.exponentialRampToValueAtTime(80, now + 0.25);
+      const gain2 = ctx.createGain();
+      gain2.gain.setValueAtTime(0.15, now);
+      gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now);
+      osc2.stop(now + 0.25);
+    } catch {}
+  }
+
+  playCry() {
+    try {
+      const ctx = this.getCtx();
+      const now = ctx.currentTime;
+      // High pitched whimper
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+      osc.frequency.exponentialRampToValueAtTime(900, now + 0.2);
+      osc.frequency.exponentialRampToValueAtTime(500, now + 0.3);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    } catch {}
+  }
 }
 
 // Floating score particles
@@ -478,8 +534,12 @@ export default function Game() {
         ctx.rect(hole.x - 25, 0, hole.width + 65, hole.y + hole.height / 2);
         ctx.clip();
 
-        if (mullahInThisHole.isRat) {
+        if (mullahInThisHole.characterType === 'rat') {
           drawRat(ctx, hole, mullahInThisHole, frameCount);
+        } else if (mullahInThisHole.characterType === 'woman') {
+          drawWoman(ctx, hole, mullahInThisHole, frameCount);
+        } else if (mullahInThisHole.characterType === 'kid') {
+          drawKid(ctx, hole, mullahInThisHole, frameCount);
         } else {
           drawMullah(ctx, hole, mullahInThisHole, frameCount);
         }
@@ -524,30 +584,48 @@ export default function Game() {
       if (data.hitEffectTimer > 0 && data.lastWhackedHole === i) {
         const alpha = data.hitEffectTimer / 20;
         const size = (20 - data.hitEffectTimer) * 4;
+        const whackedChar = data.mullahs.find(m => m.holeIndex === i);
+        const isPenaltyHit = whackedChar && (whackedChar.characterType === 'woman' || whackedChar.characterType === 'kid');
 
-        ctx.strokeStyle = `rgba(255, 215, 0, ${alpha})`;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(hole.x + hole.width / 2, hole.y - 40, size, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.strokeStyle = `rgba(255, 165, 0, ${alpha * 0.6})`;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(hole.x + hole.width / 2, hole.y - 40, size * 1.5, 0, Math.PI * 2);
-        ctx.stroke();
-
-        for (let s = 0; s < 6; s++) {
-          const angle = (s / 6) * Math.PI * 2 + frameCount * 0.1;
-          const dist = size * 0.8;
-          ctx.fillStyle = `rgba(255, 255, 100, ${alpha})`;
+        if (isPenaltyHit) {
+          // Red penalty effect
+          ctx.strokeStyle = `rgba(255, 50, 50, ${alpha})`;
+          ctx.lineWidth = 4;
           ctx.beginPath();
-          ctx.arc(
-            hole.x + hole.width / 2 + Math.cos(angle) * dist,
-            hole.y - 40 + Math.sin(angle) * dist,
-            3, 0, Math.PI * 2
-          );
-          ctx.fill();
+          ctx.arc(hole.x + hole.width / 2, hole.y - 40, size, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.strokeStyle = `rgba(255, 0, 0, ${alpha * 0.5})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(hole.x + hole.width / 2, hole.y - 40, size * 1.5, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          // Gold hit effect
+          ctx.strokeStyle = `rgba(255, 215, 0, ${alpha})`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(hole.x + hole.width / 2, hole.y - 40, size, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.strokeStyle = `rgba(255, 165, 0, ${alpha * 0.6})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(hole.x + hole.width / 2, hole.y - 40, size * 1.5, 0, Math.PI * 2);
+          ctx.stroke();
+
+          for (let s = 0; s < 6; s++) {
+            const angle = (s / 6) * Math.PI * 2 + frameCount * 0.1;
+            const dist = size * 0.8;
+            ctx.fillStyle = `rgba(255, 255, 100, ${alpha})`;
+            ctx.beginPath();
+            ctx.arc(
+              hole.x + hole.width / 2 + Math.cos(angle) * dist,
+              hole.y - 40 + Math.sin(angle) * dist,
+              3, 0, Math.PI * 2
+            );
+            ctx.fill();
+          }
         }
       }
     }
@@ -1475,6 +1553,475 @@ export default function Game() {
     ctx.restore(); // main translate (includes scale)
   }
 
+  // === WOMAN CHARACTER (penalty - don't hit!) ===
+  const WOMAN_COLORS = [
+    { hair: '#1A1A2E', dress: '#E74C3C', dressDark: '#C0392B', skin: '#F5D6C8', eyes: '#4A7B3F' },
+    { hair: '#D4A574', dress: '#3498DB', dressDark: '#2980B9', skin: '#FDEBD0', eyes: '#5B3A1E' },
+    { hair: '#6B3A2A', dress: '#27AE60', dressDark: '#1E8449', skin: '#F5CBA7', eyes: '#2E5090' },
+    { hair: '#8B2500', dress: '#8E44AD', dressDark: '#6C3483', skin: '#FAD7A0', eyes: '#4A7B3F' },
+    { hair: '#2C1810', dress: '#E91E90', dressDark: '#C0157A', skin: '#F0D5C0', eyes: '#3D2B1F' },
+  ];
+
+  function drawWoman(ctx: CanvasRenderingContext2D, hole: Hole, mullah: MullahInHole, frameCount: number) {
+    const centerX = hole.x + hole.width / 2;
+    const popOffset = 75 * mullah.popProgress;
+    const baseY = hole.y - popOffset;
+
+    const isWhacked = mullah.state === MullahState.WHACKED;
+    const isThreatening = mullah.state === MullahState.THREATENING;
+
+    ctx.save();
+    ctx.translate(centerX, baseY);
+
+    const S = 0.75;
+    ctx.scale(S, S);
+
+    if (isWhacked) {
+      const wobble = Math.sin(mullah.dizzyRotation * 3) * 0.1;
+      ctx.rotate(wobble);
+    }
+
+    if (isThreatening) {
+      const sway = Math.sin(frameCount * 0.06) * 0.03;
+      ctx.rotate(sway);
+    }
+
+    const colors = WOMAN_COLORS[mullah.colorVariant % WOMAN_COLORS.length];
+
+    // --- BODY: Dress ---
+    ctx.fillStyle = colors.dress;
+    ctx.beginPath();
+    ctx.moveTo(-24, 10);
+    ctx.quadraticCurveTo(-30, 40, -26, 80);
+    ctx.lineTo(26, 80);
+    ctx.quadraticCurveTo(30, 40, 24, 10);
+    ctx.closePath();
+    ctx.fill();
+
+    // Dress hem detail
+    const hemSwing = Math.sin(mullah.walkFrame) * 2;
+    ctx.fillStyle = colors.dressDark;
+    ctx.beginPath();
+    ctx.moveTo(-20, 58);
+    ctx.quadraticCurveTo(hemSwing, 68, 20, 58);
+    ctx.lineTo(24, 80);
+    ctx.lineTo(-24, 80);
+    ctx.closePath();
+    ctx.fill();
+
+    // Neckline
+    ctx.fillStyle = colors.skin;
+    ctx.beginPath();
+    ctx.ellipse(0, 8, 12, 7, 0, 0, Math.PI);
+    ctx.fill();
+
+    // --- ARMS (slender) ---
+    ctx.strokeStyle = colors.skin;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    if (isThreatening) {
+      // Gentle wave
+      const wave = Math.sin(frameCount * 0.08) * 4;
+      ctx.beginPath();
+      ctx.moveTo(-18, 22);
+      ctx.quadraticCurveTo(-26, 10 + wave, -22, 0 + wave);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(18, 22);
+      ctx.quadraticCurveTo(24, 35, 20, 45);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(-18, 22);
+      ctx.quadraticCurveTo(-24, 35, -20, 45);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(18, 22);
+      ctx.quadraticCurveTo(24, 35, 20, 45);
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+
+    // --- HEAD ---
+    ctx.save();
+    ctx.translate(0, -15);
+
+    // Hair behind head (long, flowing down)
+    ctx.fillStyle = colors.hair;
+    // Left flowing hair
+    ctx.beginPath();
+    ctx.moveTo(-18, -2);
+    ctx.quadraticCurveTo(-24, 15, -22, 35);
+    ctx.quadraticCurveTo(-20, 50, -16, 58);
+    ctx.lineTo(-12, 55);
+    ctx.quadraticCurveTo(-15, 38, -14, 10);
+    ctx.closePath();
+    ctx.fill();
+    // Right flowing hair
+    ctx.beginPath();
+    ctx.moveTo(18, -2);
+    ctx.quadraticCurveTo(24, 15, 22, 35);
+    ctx.quadraticCurveTo(20, 50, 16, 58);
+    ctx.lineTo(12, 55);
+    ctx.quadraticCurveTo(15, 38, 14, 10);
+    ctx.closePath();
+    ctx.fill();
+
+    // Face
+    ctx.fillStyle = colors.skin;
+    ctx.beginPath();
+    ctx.arc(0, 3, 20, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hair on top (voluminous)
+    ctx.fillStyle = colors.hair;
+    ctx.beginPath();
+    ctx.arc(0, -2, 22, Math.PI + 0.15, -0.15);
+    ctx.fill();
+
+    // Bangs
+    ctx.beginPath();
+    ctx.moveTo(-14, -10);
+    ctx.quadraticCurveTo(-8, -5, -4, -10);
+    ctx.quadraticCurveTo(0, -6, 4, -10);
+    ctx.quadraticCurveTo(8, -5, 14, -10);
+    ctx.quadraticCurveTo(10, -18, 0, -19);
+    ctx.quadraticCurveTo(-10, -18, -14, -10);
+    ctx.fill();
+
+    // Hair shine
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, -5, 18, Math.PI + 0.5, Math.PI + 1.5);
+    ctx.stroke();
+
+    if (isWhacked) {
+      // Sad/crying face
+      // Eyes closed with tears
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(-7, -1, 4, Math.PI, 2 * Math.PI);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(7, -1, 4, Math.PI, 2 * Math.PI);
+      ctx.stroke();
+
+      // Eyelashes
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-11, -2); ctx.lineTo(-12, -5);
+      ctx.moveTo(-9, -3); ctx.lineTo(-10, -6);
+      ctx.moveTo(11, -2); ctx.lineTo(12, -5);
+      ctx.moveTo(9, -3); ctx.lineTo(10, -6);
+      ctx.stroke();
+
+      // Tears
+      const tearDrop = Math.sin(mullah.dizzyRotation * 2) * 2;
+      ctx.fillStyle = '#6BD5FF';
+      ctx.beginPath();
+      ctx.ellipse(-9, 5 + tearDrop, 2, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(9, 7 + tearDrop * 0.8, 2, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Sad mouth
+      ctx.strokeStyle = '#CC5555';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 16, 5, Math.PI + 0.3, -0.3);
+      ctx.stroke();
+
+    } else {
+      // Beautiful face
+      // Eyes
+      ctx.fillStyle = '#FFF';
+      ctx.beginPath();
+      ctx.ellipse(-7, -1, 5, 3.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(7, -1, 5, 3.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Colored pupils
+      ctx.fillStyle = colors.eyes;
+      const eyeLook = Math.sin(frameCount * 0.08) * 1;
+      ctx.beginPath();
+      ctx.arc(-7 + eyeLook, -1, 2.5, 0, Math.PI * 2);
+      ctx.arc(7 + eyeLook, -1, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eye shine
+      ctx.fillStyle = '#FFF';
+      ctx.beginPath();
+      ctx.arc(-6, -2, 1, 0, Math.PI * 2);
+      ctx.arc(8, -2, 1, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eyelashes
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-12, -3); ctx.lineTo(-13, -6);
+      ctx.moveTo(-10, -4); ctx.lineTo(-11, -7);
+      ctx.moveTo(-7, -4.5); ctx.lineTo(-7, -8);
+      ctx.moveTo(12, -3); ctx.lineTo(13, -6);
+      ctx.moveTo(10, -4); ctx.lineTo(11, -7);
+      ctx.moveTo(7, -4.5); ctx.lineTo(7, -8);
+      ctx.stroke();
+
+      // Eyebrows (gentle arch)
+      ctx.strokeStyle = colors.hair;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(-7, -7, 6, Math.PI + 0.5, -0.5);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(7, -7, 6, Math.PI + 0.5, -0.5);
+      ctx.stroke();
+
+      // Small cute nose
+      ctx.fillStyle = `${colors.skin}CC`;
+      ctx.beginPath();
+      ctx.arc(0, 5, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Lips (red, smiling)
+      ctx.fillStyle = '#E74C3C';
+      ctx.beginPath();
+      ctx.moveTo(-5, 10);
+      ctx.quadraticCurveTo(0, 14, 5, 10);
+      ctx.quadraticCurveTo(0, 16, -5, 10);
+      ctx.fill();
+
+      // Blush
+      ctx.fillStyle = 'rgba(255, 150, 150, 0.3)';
+      ctx.beginPath();
+      ctx.ellipse(-11, 5, 5, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(11, 5, 5, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore(); // head translate
+
+    // Floating heart indicator (don't hit!)
+    if (!isWhacked) {
+      const heartBob = Math.sin(frameCount * 0.1) * 3;
+      ctx.fillStyle = '#FF69B4';
+      ctx.font = '18px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('\u2665', 0, -72 + heartBob);
+      ctx.textAlign = 'left';
+    }
+
+    ctx.restore(); // main translate
+  }
+
+  // === KID CHARACTER (penalty - don't hit!) ===
+  const KID_COLORS = [
+    { shirt: '#3498DB', stripe: '#2980B9', hair: '#6B3A2A' },
+    { shirt: '#E67E22', stripe: '#D35400', hair: '#1A1A2E' },
+    { shirt: '#2ECC71', stripe: '#27AE60', hair: '#D4A574' },
+    { shirt: '#E74C3C', stripe: '#C0392B', hair: '#4A3728' },
+    { shirt: '#9B59B6', stripe: '#8E44AD', hair: '#8B4513' },
+  ];
+
+  function drawKid(ctx: CanvasRenderingContext2D, hole: Hole, mullah: MullahInHole, frameCount: number) {
+    const centerX = hole.x + hole.width / 2;
+    const popOffset = 75 * mullah.popProgress;
+    const baseY = hole.y - popOffset;
+
+    const isWhacked = mullah.state === MullahState.WHACKED;
+    const isThreatening = mullah.state === MullahState.THREATENING;
+
+    ctx.save();
+    ctx.translate(centerX, baseY);
+
+    const S = 0.65; // Smaller than adults
+    ctx.scale(S, S);
+
+    if (isWhacked) {
+      const wobble = Math.sin(mullah.dizzyRotation * 3) * 0.1;
+      ctx.rotate(wobble);
+    }
+
+    if (isThreatening) {
+      // Playful bouncing
+      const bounce = Math.abs(Math.sin(frameCount * 0.12)) * 3;
+      ctx.translate(0, -bounce);
+    }
+
+    const colors = KID_COLORS[mullah.colorVariant % KID_COLORS.length];
+
+    // --- BODY: T-shirt ---
+    ctx.fillStyle = colors.shirt;
+    ctx.beginPath();
+    ctx.moveTo(-22, 12);
+    ctx.quadraticCurveTo(-26, 38, -24, 80);
+    ctx.lineTo(24, 80);
+    ctx.quadraticCurveTo(26, 38, 22, 12);
+    ctx.closePath();
+    ctx.fill();
+
+    // Shirt stripe
+    ctx.fillStyle = colors.stripe;
+    ctx.fillRect(-16, 38, 32, 6);
+
+    // Collar
+    ctx.fillStyle = '#FDEBD0';
+    ctx.beginPath();
+    ctx.ellipse(0, 10, 10, 5, 0, 0, Math.PI);
+    ctx.fill();
+
+    // --- Small arms ---
+    ctx.strokeStyle = '#FDEBD0';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    if (isThreatening) {
+      // Arms waving playfully
+      const wave = Math.sin(frameCount * 0.15) * 8;
+      ctx.beginPath();
+      ctx.moveTo(-16, 20);
+      ctx.quadraticCurveTo(-26, 8 + wave, -22, -2 + wave);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(16, 20);
+      ctx.quadraticCurveTo(26, 8 - wave, 22, -2 - wave);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(-16, 20);
+      ctx.quadraticCurveTo(-22, 30, -18, 40);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(16, 20);
+      ctx.quadraticCurveTo(22, 30, 18, 40);
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+
+    // --- HEAD ---
+    ctx.save();
+    ctx.translate(0, -12);
+
+    // Round chubby face
+    ctx.fillStyle = '#FDEBD0';
+    ctx.beginPath();
+    ctx.arc(0, 3, 22, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ears
+    ctx.fillStyle = '#FDEBD0';
+    ctx.beginPath();
+    ctx.ellipse(-21, 3, 5, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(21, 3, 5, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Messy hair
+    ctx.fillStyle = colors.hair;
+    ctx.beginPath();
+    ctx.arc(0, -5, 22, Math.PI + 0.3, -0.3);
+    ctx.fill();
+    // Hair tufts
+    ctx.beginPath();
+    ctx.moveTo(-10, -24);
+    ctx.quadraticCurveTo(-6, -30, -2, -25);
+    ctx.quadraticCurveTo(2, -32, 6, -25);
+    ctx.quadraticCurveTo(10, -30, 12, -23);
+    ctx.fill();
+
+    if (isWhacked) {
+      // Crying face
+      // Eyes squeezed shut (X shapes)
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(-11, -2); ctx.lineTo(-5, 4);
+      ctx.moveTo(-5, -2); ctx.lineTo(-11, 4);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(5, -2); ctx.lineTo(11, 4);
+      ctx.moveTo(11, -2); ctx.lineTo(5, 4);
+      ctx.stroke();
+
+      // Tears streaming
+      const tearDrop = Math.sin(mullah.dizzyRotation * 2) * 2;
+      ctx.fillStyle = '#6BD5FF';
+      ctx.beginPath();
+      ctx.ellipse(-8, 8 + tearDrop, 2.5, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(8, 10 + tearDrop * 0.7, 2.5, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Crying mouth (wide open)
+      ctx.fillStyle = '#3A0808';
+      ctx.beginPath();
+      ctx.ellipse(0, 16, 6, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else {
+      // Cute face
+      // Big round eyes
+      ctx.fillStyle = '#FFF';
+      ctx.beginPath();
+      ctx.arc(-7, 0, 6, 0, Math.PI * 2);
+      ctx.arc(7, 0, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Big pupils
+      ctx.fillStyle = '#2C3E50';
+      const eyeLook = Math.sin(frameCount * 0.07) * 1.5;
+      ctx.beginPath();
+      ctx.arc(-7 + eyeLook, 0, 3.5, 0, Math.PI * 2);
+      ctx.arc(7 + eyeLook, 0, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eye shine
+      ctx.fillStyle = '#FFF';
+      ctx.beginPath();
+      ctx.arc(-6, -1.5, 1.5, 0, Math.PI * 2);
+      ctx.arc(8, -1.5, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Simple eyebrows
+      ctx.strokeStyle = colors.hair;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-11, -7); ctx.lineTo(-4, -6);
+      ctx.moveTo(11, -7); ctx.lineTo(4, -6);
+      ctx.stroke();
+
+      // Small nose
+      ctx.fillStyle = '#E8C8A0';
+      ctx.beginPath();
+      ctx.arc(0, 6, 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Happy smile
+      ctx.strokeStyle = '#C0392B';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 10, 5, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+
+      // Rosy cheeks
+      ctx.fillStyle = 'rgba(255, 150, 150, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(-12, 7, 4, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(12, 7, 4, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore(); // head translate
+
+    ctx.restore(); // main translate
+  }
+
   function drawTurban(ctx: CanvasRenderingContext2D, x: number, y: number, tilt: number) {
     ctx.save();
     ctx.translate(x, y);
@@ -1578,7 +2125,7 @@ export default function Game() {
 
     // Timer panel
     const timeSeconds = Math.ceil(data.timeRemaining / 60);
-    const timeRatio = data.timeRemaining / (20 * 60);
+    const timeRatio = data.timeRemaining / config.gameDuration;
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
     ctx.beginPath();
@@ -1596,7 +2143,12 @@ export default function Game() {
     ctx.roundRect(canvasWidth - 145, 42, 120 * timeRatio, 12, 4);
     ctx.fill();
 
-    if (timeSeconds <= 10) {
+    if (timeSeconds <= 5) {
+      // Frantic mode - pulsing red
+      const urgency = Math.sin(frameCount * 0.2) * 0.3 + 0.7;
+      ctx.fillStyle = `rgba(255, 30, 30, ${urgency})`;
+      ctx.font = 'bold 24px Arial';
+    } else if (timeSeconds <= 10) {
       const urgency = Math.sin(frameCount * 0.15) * 0.3 + 0.7;
       ctx.fillStyle = `rgba(255, 68, 68, ${urgency})`;
       ctx.font = 'bold 22px Arial';
@@ -1606,8 +2158,20 @@ export default function Game() {
     }
     ctx.fillText(`${timeSeconds}s`, canvasWidth - 145, 37);
 
+    // Frantic mode warning
+    if (timeSeconds <= 5 && timeSeconds > 0) {
+      const franticPulse = Math.sin(frameCount * 0.15) * 0.4 + 0.6;
+      ctx.globalAlpha = franticPulse;
+      ctx.fillStyle = '#FF0000';
+      ctx.font = 'bold 18px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('FRANTIC!', canvasWidth / 2, 30);
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
+    }
+
     // Instructions hint
-    if (data.timeRemaining > 17 * 60) {
+    if (data.timeRemaining > 27 * 60) {
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
       ctx.font = '16px Arial';
@@ -1964,7 +2528,7 @@ export default function Game() {
     ctx.globalAlpha = 0.4;
     ctx.fillStyle = '#888888';
     ctx.font = '11px Arial';
-    ctx.fillText('v0.2', width / 2, height - 12);
+    ctx.fillText('v0.3', width / 2, height - 12);
     ctx.globalAlpha = 1;
 
     ctx.textAlign = 'left';
@@ -2135,88 +2699,146 @@ export default function Game() {
 
   function drawGameOverOverlay(ctx: CanvasRenderingContext2D, width: number, height: number, data: ReturnType<GameEngine['getData']>, frameCount: number, confetti: ConfettiParticle[]) {
     const isSmall = width < 500;
+    const isLoss = data.score < 0;
+
     // Dark background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillStyle = isLoss ? 'rgba(40, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0.85)';
     ctx.fillRect(0, 0, width, height);
 
-    // Confetti
-    drawConfetti(ctx, confetti, height);
+    if (!isLoss) {
+      // Confetti (only on win)
+      drawConfetti(ctx, confetti, height);
 
-    // Slowly add more confetti
-    if (confetti.length < 60 && Math.random() < 0.3) {
-      confetti.push({
-        x: Math.random() * width,
-        y: -10,
-        vx: (Math.random() - 0.5) * 3,
-        vy: Math.random() * 1.5 + 0.5,
-        color: ['#FF0000', '#FFD700', '#00CC00', '#0088FF', '#FF6600', '#CC00FF'][Math.floor(Math.random() * 6)],
-        rotation: Math.random() * Math.PI * 2,
-        rotationSpeed: (Math.random() - 0.5) * 0.2,
-        w: Math.random() * 8 + 4,
-        h: Math.random() * 5 + 2,
-      });
+      // Slowly add more confetti
+      if (confetti.length < 60 && Math.random() < 0.3) {
+        confetti.push({
+          x: Math.random() * width,
+          y: -10,
+          vx: (Math.random() - 0.5) * 3,
+          vy: Math.random() * 1.5 + 0.5,
+          color: ['#FF0000', '#FFD700', '#00CC00', '#0088FF', '#FF6600', '#CC00FF'][Math.floor(Math.random() * 6)],
+          rotation: Math.random() * Math.PI * 2,
+          rotationSpeed: (Math.random() - 0.5) * 0.2,
+          w: Math.random() * 8 + 4,
+          h: Math.random() * 5 + 2,
+        });
+      }
     }
 
     ctx.textAlign = 'center';
 
-    // Layout anchors
-    const titleY = isSmall ? height * 0.08 : height * 0.1;
-    const mullahY = isSmall ? height * 0.28 : height * 0.3;
-    const scoreY = isSmall ? height * 0.56 : height * 0.62;
+    if (isLoss) {
+      // === LOSS SCREEN ===
+      const titleY = isSmall ? height * 0.12 : height * 0.15;
 
-    // "TIME'S UP!" title
-    const titleSize = isSmall ? 34 : 52;
-    ctx.shadowColor = '#FF4400';
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.font = `bold ${titleSize}px Arial`;
-    ctx.fillText("TIME'S UP!", width / 2, titleY);
-    ctx.shadowBlur = 0;
+      // "YOU LOST!" title in red
+      const titleSize = isSmall ? 36 : 56;
+      ctx.shadowColor = '#FF0000';
+      ctx.shadowBlur = 20;
+      ctx.fillStyle = '#FF2222';
+      ctx.font = `bold ${titleSize}px Arial`;
+      const titlePulse = Math.sin(frameCount * 0.08) * 0.15 + 0.85;
+      ctx.globalAlpha = titlePulse;
+      ctx.fillText('YOU LOST!', width / 2, titleY);
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
 
-    // Dizzy mullah
-    drawDizzyMullahLarge(ctx, width / 2, mullahY, frameCount, data.whacks);
+      // Sad message
+      ctx.fillStyle = '#CC8888';
+      ctx.font = `${isSmall ? 14 : 18}px Arial`;
+      ctx.fillText("Don't hit women and children!", width / 2, titleY + (isSmall ? 28 : 36));
 
-    // Big score
-    ctx.shadowColor = '#000';
-    ctx.shadowBlur = 6;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 2;
-    ctx.fillStyle = '#FFD700';
-    ctx.font = `bold ${isSmall ? 42 : 56}px Arial`;
-    ctx.fillText(`${data.score}`, width / 2, scoreY);
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
+      // Big red score
+      const scoreY = isSmall ? height * 0.42 : height * 0.45;
+      ctx.shadowColor = '#FF0000';
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = '#FF4444';
+      ctx.font = `bold ${isSmall ? 48 : 64}px Arial`;
+      ctx.fillText(`${data.score}`, width / 2, scoreY);
+      ctx.shadowBlur = 0;
 
-    ctx.fillStyle = '#CCCCCC';
-    ctx.font = '14px Arial';
-    ctx.fillText('POINTS', width / 2, scoreY + 18);
+      ctx.fillStyle = '#AA6666';
+      ctx.font = '16px Arial';
+      ctx.fillText('POINTS', width / 2, scoreY + 22);
 
-    // Stats line
-    ctx.font = '15px Arial';
-    ctx.fillStyle = '#BBBBBB';
-    ctx.fillText(`Max Combo: x${data.maxCombo}`, width / 2, scoreY + 40);
+      // Skull/X indicators
+      ctx.fillStyle = '#FF4444';
+      ctx.font = `${isSmall ? 40 : 50}px Arial`;
+      const xBob = Math.sin(frameCount * 0.05) * 5;
+      ctx.fillText('\u2716', width / 2 - (isSmall ? 60 : 80), scoreY - 10 + xBob);
+      ctx.fillText('\u2716', width / 2 + (isSmall ? 60 : 80), scoreY - 10 - xBob);
 
-    // High score line (separate from combo)
-    if (data.score >= data.highScore && data.score > 0) {
-      ctx.fillStyle = '#FFD700';
-      ctx.font = 'bold 17px Arial';
-      const sparkle = Math.sin(frameCount * 0.1) > 0 ? ' *' : '* ';
-      ctx.fillText(`${sparkle} NEW HIGH SCORE! ${sparkle}`, width / 2, scoreY + 62);
-    } else {
-      ctx.fillStyle = '#999';
+      // Best score
+      ctx.fillStyle = '#888';
       ctx.font = '14px Arial';
-      ctx.fillText(`Best: ${data.highScore}`, width / 2, scoreY + 62);
+      ctx.fillText(`Best: ${data.highScore}`, width / 2, scoreY + 48);
+
+      // Tip
+      ctx.fillStyle = '#AA8888';
+      ctx.font = `${isSmall ? 12 : 14}px Arial`;
+      ctx.fillText('Tip: Only whack the mullahs and rats!', width / 2, scoreY + 72);
+
+    } else {
+      // === WIN SCREEN ===
+      // Layout anchors
+      const titleY = isSmall ? height * 0.08 : height * 0.1;
+      const mullahY = isSmall ? height * 0.28 : height * 0.3;
+      const scoreY = isSmall ? height * 0.56 : height * 0.62;
+
+      // "TIME'S UP!" title
+      const titleSize = isSmall ? 34 : 52;
+      ctx.shadowColor = '#FF4400';
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = `bold ${titleSize}px Arial`;
+      ctx.fillText("TIME'S UP!", width / 2, titleY);
+      ctx.shadowBlur = 0;
+
+      // Dizzy mullah
+      drawDizzyMullahLarge(ctx, width / 2, mullahY, frameCount, data.whacks);
+
+      // Big score
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+      ctx.fillStyle = '#FFD700';
+      ctx.font = `bold ${isSmall ? 42 : 56}px Arial`;
+      ctx.fillText(`${data.score}`, width / 2, scoreY);
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+
+      ctx.fillStyle = '#CCCCCC';
+      ctx.font = '14px Arial';
+      ctx.fillText('POINTS', width / 2, scoreY + 18);
+
+      // Stats line
+      ctx.font = '15px Arial';
+      ctx.fillStyle = '#BBBBBB';
+      ctx.fillText(`Max Combo: x${data.maxCombo}`, width / 2, scoreY + 40);
+
+      // High score line
+      if (data.score >= data.highScore && data.score > 0) {
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 17px Arial';
+        const sparkle = Math.sin(frameCount * 0.1) > 0 ? ' *' : '* ';
+        ctx.fillText(`${sparkle} NEW HIGH SCORE! ${sparkle}`, width / 2, scoreY + 62);
+      } else {
+        ctx.fillStyle = '#999';
+        ctx.font = '14px Arial';
+        ctx.fillText(`Best: ${data.highScore}`, width / 2, scoreY + 62);
+      }
     }
 
-    // Play Again button
+    // Play Again button (both screens)
     const btn = getPlayAgainRect(width, height);
     const btnHover = Math.sin(frameCount * 0.06) * 0.15 + 0.85;
 
     // Button glow
-    ctx.shadowColor = '#FF4400';
+    ctx.shadowColor = isLoss ? '#FF0000' : '#FF4400';
     ctx.shadowBlur = 12 * btnHover;
-    ctx.fillStyle = '#CC3300';
+    ctx.fillStyle = isLoss ? '#AA0000' : '#CC3300';
     ctx.beginPath();
     ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 12);
     ctx.fill();
@@ -2224,8 +2846,13 @@ export default function Game() {
 
     // Button face
     const btnGrad = ctx.createLinearGradient(btn.x, btn.y, btn.x, btn.y + btn.h);
-    btnGrad.addColorStop(0, '#FF5533');
-    btnGrad.addColorStop(1, '#CC3300');
+    if (isLoss) {
+      btnGrad.addColorStop(0, '#CC2222');
+      btnGrad.addColorStop(1, '#AA0000');
+    } else {
+      btnGrad.addColorStop(0, '#FF5533');
+      btnGrad.addColorStop(1, '#CC3300');
+    }
     ctx.fillStyle = btnGrad;
     ctx.beginPath();
     ctx.roundRect(btn.x + 2, btn.y + 2, btn.w - 4, btn.h - 4, 10);
@@ -2234,7 +2861,7 @@ export default function Game() {
     // Button text
     ctx.fillStyle = '#FFFFFF';
     ctx.font = 'bold 22px Arial';
-    ctx.fillText('PLAY AGAIN', width / 2, btn.y + 33);
+    ctx.fillText(isLoss ? 'TRY AGAIN' : 'PLAY AGAIN', width / 2, btn.y + 33);
 
     ctx.textAlign = 'left';
   }
@@ -2323,7 +2950,10 @@ export default function Game() {
           if (data.state === GameState.GAMEOVER && prevState === GameState.PLAYING && !gameOverSoundPlayed) {
             soundRef.current.playGameOver();
             gameOverSoundPlayed = true;
-            confettiRef.current = spawnConfetti(currentConfig.canvasWidth);
+            // Only spawn confetti on win (score >= 0)
+            if (data.score >= 0) {
+              confettiRef.current = spawnConfetti(currentConfig.canvasWidth);
+            }
           }
           if (data.state === GameState.PLAYING) {
             gameOverSoundPlayed = false;
@@ -2389,14 +3019,22 @@ export default function Game() {
       if (hitIndex >= 0) {
         const mullah = data.mullahs[hitIndex];
         const hole = config.holes[mullah.holeIndex];
-        spawnHitParticle(hole.x + hole.width / 2, hole.y - 45, data.combo, mullah.isRat);
-        // Play sounds directly in the gesture handler for mobile compatibility
-        soundRef.current?.playWhack();
-        if (mullah.isRat) {
-          setTimeout(() => soundRef.current?.playSqueak(), 80);
-        }
-        if (data.combo > 1) {
-          setTimeout(() => soundRef.current?.playCombo(), 100);
+        const isPenalty = mullah.characterType === 'woman' || mullah.characterType === 'kid';
+
+        if (isPenalty) {
+          const penalty = mullah.characterType === 'woman' ? 3 : 2;
+          spawnPenaltyParticle(hole.x + hole.width / 2, hole.y - 45, penalty, mullah.characterType);
+          soundRef.current?.playPenalty();
+          setTimeout(() => soundRef.current?.playCry(), 100);
+        } else {
+          spawnHitParticle(hole.x + hole.width / 2, hole.y - 45, data.combo, mullah.isRat);
+          soundRef.current?.playWhack();
+          if (mullah.isRat) {
+            setTimeout(() => soundRef.current?.playSqueak(), 80);
+          }
+          if (data.combo > 1) {
+            setTimeout(() => soundRef.current?.playCombo(), 100);
+          }
         }
       } else if (data.state === GameState.PLAYING) {
         soundRef.current?.playMiss();
@@ -2442,6 +3080,19 @@ export default function Game() {
     });
   }
 
+  function spawnPenaltyParticle(x: number, y: number, penalty: number, charType: string) {
+    const text = charType === 'woman' ? `-${penalty} NO!` : `-${penalty} CHILD!`;
+    particlesRef.current.push({
+      x: x + (Math.random() - 0.5) * 20,
+      y,
+      vy: -2,
+      text,
+      color: '#FF2222',
+      alpha: 1,
+      scale: 1.4,
+    });
+  }
+
   // Don't render until orientation is detected (avoids flash)
   if (isPortrait === null) {
     return (
@@ -2461,7 +3112,7 @@ export default function Game() {
         style={{ imageRendering: 'auto' }}
       />
       <p className="text-gray-400 mt-4 text-sm">
-        Click or tap the mullah when he pops up!
+        Whack the mullahs, spare the innocents!
       </p>
       <a
         href="https://github.com/sohei1l"
